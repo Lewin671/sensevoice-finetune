@@ -50,8 +50,8 @@ They are one person's models: better at that person's words, slightly worse at a
 than the original (below), and of use to others mainly as a worked example. The recordings and
 their transcripts it was trained on are not published.
 
-Local Voice IME 0.9.0 offers `model-20261008` under *Settings → Voice input*, as an
-example. The app accepts catalogued models only, by checksum; a model of your own cannot be
+Local Voice IME offers `model-20261009` under *Settings → Voice input*, as an
+example (0.9.0 offered `model-20261008`; 0.9.1 and later the newer one). The app accepts catalogued models only, by checksum; a model of your own cannot be
 imported yet.
 
 ## Recipe
