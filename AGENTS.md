@@ -31,3 +31,11 @@ The repository is public; the recordings, what was dictated and the labels are n
 - Reported error rates come from the exported, quantized model (`transcribe --onnx`).
 - `sensevoice_finetune/export_onnx.py` is adapted from sherpa-onnx (Apache-2.0); keep `NOTICE`
   accurate when it changes.
+
+## Releases are models
+
+Local Voice IME (0.10.0 and later) reads the newest release of this repository to find a newer
+fine-tuned model. So every release here is a model and nothing else: tagged `model-<yyyymmdd>`,
+with exactly `model.int8.onnx` and `tokens.txt` as written by `export-onnx`. Do not publish
+releases of the code. The notes of a release say with which commit the model was trained and
+what was measured; [docs/EVIDENCE.md](docs/EVIDENCE.md) describes the newest one.
