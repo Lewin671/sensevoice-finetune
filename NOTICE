@@ -1,0 +1,6 @@
+sensevoice-finetune
+Copyright 2026 Local Voice IME Contributors
+
+export_onnx.py is adapted from scripts/sense-voice/export-onnx.py of sherpa-onnx
+(https://github.com/k2-fsa/sherpa-onnx), Copyright Xiaomi Corporation and the k2-fsa
+contributors, licensed under the Apache License 2.0.

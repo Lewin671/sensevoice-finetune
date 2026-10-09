@@ -1,0 +1,20 @@
+# Recordings, transcripts and everything trained on them stay on your machine.
+*.zip
+*.wav
+*.pt
+*.onnx
+*.parquet
+*.jsonl
+*.tsv
+/work*/
+/export*/
+/replay*/
+/public*/
+/stock/
+/SenseVoiceSmall/
+/cv*/
+/final*/
+/runs/
+/venv/
+__pycache__/
+.DS_Store

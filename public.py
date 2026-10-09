@@ -1,0 +1,75 @@
+"""Unpack the public test sets of Local Voice IME's docs/MODELS.md into audio files and manifests, so that a
+fine-tuned model can be checked for what it forgot.
+
+    public.py <benchmark dir> <out dir>
+
+<benchmark dir> is the working directory of that repository's scripts/bench (data/<set>.parquet). For every set
+this writes two manifests of {"id", "audio", "text"} lines:
+
+    <out dir>/test_<set>.jsonl   the 300 utterances every table in that docs/MODELS.md is computed on
+                                 (same order and filters as its scripts/bench/bench.py)
+    <out dir>/dev_<set>.jsonl    the 100 that follow them, for choosing settings without
+                                 touching the ones that are reported
+
+The audio is written as 16 kHz mono 16-bit WAV, which is what the recognizer gets either way.
+"""
+import io, json, os, random, sys
+from math import gcd
+import numpy as np, pyarrow.parquet as pq, soundfile as sf
+from scipy.signal import resample_poly
+
+SETS = ["aishell1_test_0", "wenet_test_net_0", "wenet_test_meeting", "ascend_test",
+        "librispeech_test_clean", "kespeech_test_0", "cv_zh_test"]
+TEST, DEV = 300, 100
+
+
+def rows(path, name, wanted):
+    """Rows in the order bench.py (and bench_mlx.py for KeSpeech / Common Voice) visits them."""
+    f = pq.ParquetFile(path)
+    out = []
+    for i in range(f.num_row_groups):
+        out += f.read_row_group(i).to_pylist()
+        # bench.py stops reading at six times the 300 it wants; the order after shuffling depends on it
+        if len(out) > TEST * 6 and not name.startswith("ascend"):
+            break
+    random.Random(0).shuffle(out)
+    for r in out:
+        if name.startswith("ascend") and r["language"] != "mixed":
+            continue
+        audio = r.get("context") or r.get("audio")
+        text = r.get("answer") or r.get("text") or r.get("transcription") or r.get("Text") or r.get("sentence")
+        try:
+            x, rate = sf.read(io.BytesIO(audio["bytes"]), dtype="float32")
+        except Exception:
+            continue
+        if x.ndim > 1:
+            x = x.mean(1)
+        if len(x) / rate < 1.0:
+            continue
+        yield x, rate, text
+        wanted -= 1
+        if wanted == 0:
+            return
+
+
+def main():
+    bench, out = sys.argv[1], sys.argv[2]
+    for name in SETS:
+        os.makedirs(os.path.join(out, name), exist_ok=True)
+        manifests = {"test": [], "dev": []}
+        for i, (x, rate, text) in enumerate(rows(os.path.join(bench, "data", f"{name}.parquet"), name, TEST + DEV)):
+            if rate != 16000:
+                g = gcd(rate, 16000)
+                x = resample_poly(x, 16000 // g, rate // g).astype(np.float32)
+            path = os.path.abspath(os.path.join(out, name, f"{i:03d}.wav"))
+            sf.write(path, x, 16000, subtype="PCM_16")
+            manifests["test" if i < TEST else "dev"].append({"id": f"{name}-{i:03d}", "audio": path, "text": text})
+        for split, items in manifests.items():
+            with open(os.path.join(out, f"{split}_{name}.jsonl"), "w", encoding="utf-8") as f:
+                for it in items:
+                    f.write(json.dumps(it, ensure_ascii=False) + "\n")
+        print(name, {k: len(v) for k, v in manifests.items()})
+
+
+if __name__ == "__main__":
+    main()
