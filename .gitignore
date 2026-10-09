@@ -6,6 +6,11 @@
 *.parquet
 *.jsonl
 *.tsv
+# transcripts (hypotheses, held-out results), your list for terms.py, logs of runs
+*.json
+/terms*.txt
+*.log
+*.out
 /work*/
 /export*/
 /replay*/
