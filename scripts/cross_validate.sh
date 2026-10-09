@@ -4,11 +4,11 @@
 # exported, lets sherpa-onnx transcribe the left-out fold with it, and scores all folds together
 # against the stock model.
 #
-#   ./cross_validate.sh <work dir> <SenseVoiceSmall dir> <stock model dir> <out dir> [train.py options]
+#   scripts/cross_validate.sh <work dir> <SenseVoiceSmall dir> <stock model dir> <out dir> [train options]
 #
-#   MIX=<weight>    pull each model back towards the original before exporting (mix.py); default 1
+#   MIX=<weight>    pull each model back towards the original before exporting (the mix command); default 1
 #   FOLDS="0 1 2"   only these folds (default: all five)
-#   PYTHON=<path>   the interpreter with the packages of README.md (default: python3)
+#   PYTHON=<path>   the interpreter with the packages of pyproject.toml (default: python3)
 #
 # A fold that is already transcribed is skipped, so an interrupted run can be started again;
 # <out dir>/fingerprint remembers the labels, the scripts, the options and the files they name,
@@ -17,6 +17,8 @@
 set -euo pipefail
 
 here=$(cd "$(dirname "$0")" && pwd)
+root=$(dirname "$here")
+export PYTHONPATH=$root${PYTHONPATH:+:$PYTHONPATH}  # this checkout, installed or not
 work=$1 model=$2 stock=$3 out=$4
 shift 4
 python=${PYTHON:-python3}
@@ -25,7 +27,7 @@ export PYTORCH_ENABLE_MPS_FALLBACK=1
 mkdir -p "$out"
 
 # everything a fold's result depends on, files named by the options included
-fingerprint=$("$python" - "$work/labels.jsonl" "$model/model.pt" "$mix" "$here" "$@" <<'PY'
+fingerprint=$("$python" - "$work/labels.jsonl" "$model/model.pt" "$mix" "$root" "$@" <<'PY'
 import hashlib, os, sys
 h = hashlib.sha256()
 def add(path):
@@ -35,11 +37,12 @@ def add(path):
     else:
         with open(path, "rb") as f:
             h.update(f.read())
-labels, checkpoint, mix, here, *options = sys.argv[1:]
+labels, checkpoint, mix, root, *options = sys.argv[1:]
 add(labels), add(checkpoint)
-for name in sorted(os.listdir(here)):
-    if name.endswith((".py", ".sh")):
-        add(os.path.join(here, name))
+for directory in ("sensevoice_finetune", "scripts"):
+    for name in sorted(os.listdir(os.path.join(root, directory))):
+        if name.endswith((".py", ".sh")):
+            add(os.path.join(root, directory, name))
 h.update(repr((mix, options)).encode())
 for o in options:
     if os.path.isfile(o):
@@ -60,7 +63,7 @@ for fold in ${FOLDS:-0 1 2 3 4}; do
         mkdir -p "$dir"
         rm -f "$dir/model.pt"  # of a run that was interrupted: never export what this run did not train
         set +e
-        "$python" -u "$here/train.py" "$work" "$model" "$dir" --holdout "$fold" --save "$@" 2>&1 |
+        "$python" -u -m sensevoice_finetune train "$work" "$model" "$dir" --holdout "$fold" --save "$@" 2>&1 |
             tee "$dir.log" | grep -E "^(train|training|the replay|epoch|  eval|saved)"
         status=${PIPESTATUS[0]}
         set -e
@@ -68,14 +71,14 @@ for fold in ${FOLDS:-0 1 2 3 4}; do
             echo "training fold $fold failed, see $dir.log" >&2
             exit "$status"
         fi
-        "$python" "$here/export_onnx.py" "$model" "$dir/model.pt" "$dir/onnx" "$mix" >"$dir.export.log" 2>&1
-        "$python" "$here/transcribe.py" "$work/labels.jsonl" "$dir/holdout.tmp.json" --fold "$fold" --onnx "$dir/onnx"
+        "$python" -m sensevoice_finetune export-onnx "$model" "$dir/model.pt" "$dir/onnx" "$mix" >"$dir.export.log" 2>&1
+        "$python" -m sensevoice_finetune transcribe "$work/labels.jsonl" "$dir/holdout.tmp.json" --fold "$fold" --onnx "$dir/onnx"
         rm -f "$dir/model.pt" "$dir/onnx/model.onnx" "$dir/onnx/model.int8.onnx"
         mv "$dir/holdout.tmp.json" "$dir/holdout.json"
     fi
     files+=${files:+,}$dir/holdout.json
 done
 
-[[ -f $work/hyp_sensevoice.json ]] || "$python" "$here/hypotheses.py" "$work" "$stock"
+[[ -f $work/hyp_sensevoice.json ]] || "$python" -m sensevoice_finetune hypotheses "$work" "$stock"
 # with FOLDS only those folds were transcribed, on purpose
-"$python" "$here/score.py" ${FOLDS:+--common} "$work" "stock=$work/hyp_sensevoice.json" "fine-tuned=$files"
+"$python" -m sensevoice_finetune score ${FOLDS:+--common} "$work" "stock=$work/hyp_sensevoice.json" "fine-tuned=$files"

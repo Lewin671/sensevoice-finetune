@@ -1,6 +1,6 @@
 """How often does each system write the words that matter to this speaker?
 
-    terms.py <work dir> <terms.txt> <name>=<transcripts.json>[,<more.json>] [...]
+    sensevoice-finetune terms <work dir> <terms.txt> <name>=<transcripts.json>[,<more.json>] [...]
 
 <terms.txt> has one term per line (a name, a place, a piece of jargon; "#" starts a comment).
 For every term: in how many labelled utterances (grade A) it occurs, and in how many of those
@@ -8,7 +8,7 @@ each system wrote it. Case and spaces are ignored. Only utterances every system 
 are counted, so held-out transcripts of a cross-validation can be compared with the stock model.
 """
 import json, os, re, sys
-import sv
+from . import sv
 
 
 def main():

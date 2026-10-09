@@ -1,7 +1,7 @@
 """Unpack the public test sets of Local Voice IME's docs/MODELS.md into audio files and manifests, so that a
 fine-tuned model can be checked for what it forgot.
 
-    public.py <benchmark dir> <out dir>
+    sensevoice-finetune public <benchmark dir> <out dir>
 
 <benchmark dir> is the working directory of that repository's scripts/bench (data/<set>.parquet). For every set
 this writes two manifests of {"id", "audio", "text"[, "group"]} lines ("group": the speaker or

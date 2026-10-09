@@ -1,6 +1,6 @@
 """Other people's speech for the fine-tuned model to rehearse, labelled by the model it starts from.
 
-    replay.py <out dir> <model dir> <corpus.parquet>[:N] [<corpus.parquet>[:N] ...]
+    sensevoice-finetune replay <out dir> <model dir> <corpus.parquet>[:N] [<corpus.parquet>[:N] ...]
 
 A model trained on twenty minutes of one voice drifts away from everything else. Mixing in
 utterances of other speakers, with the transcript the *unchanged* model gives them as the
@@ -19,7 +19,7 @@ import io, json, os, random, sys
 from math import gcd
 import numpy as np, pyarrow.parquet as pq, soundfile as sf
 from scipy.signal import resample_poly
-import sv
+from . import sv
 
 
 def corpus_name(path, taken):

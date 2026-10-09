@@ -1,0 +1,42 @@
+[build-system]
+requires = ["setuptools>=77"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "sensevoice-finetune"
+version = "0.1.0"
+description = "Fine-tune SenseVoice Small on an export of one's own recordings, for sherpa-onnx"
+readme = "README.md"
+requires-python = ">=3.11"
+license = "Apache-2.0"
+license-files = ["LICENSE", "NOTICE"]
+authors = [{ name = "Local Voice IME Contributors" }]
+dependencies = [
+    "funasr",
+    "kaldi-native-fbank",
+    "modelscope",
+    "numpy",
+    "onnx",
+    "onnxruntime",
+    "pyarrow",
+    "scipy",
+    "sentencepiece",
+    "sherpa-onnx",
+    "soundfile",
+    "torch",
+    "torchaudio",
+    "zhconv",
+]
+
+[project.optional-dependencies]
+# hypotheses-mlx; in an environment of its own if these clash with the training packages
+mlx = ["mlx-audio", "soundfile"]
+
+[project.scripts]
+sensevoice-finetune = "sensevoice_finetune.__main__:main"
+
+[project.urls]
+Repository = "https://github.com/Lewin671/sensevoice-finetune"
+
+[tool.setuptools]
+packages = ["sensevoice_finetune"]

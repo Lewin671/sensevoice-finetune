@@ -1,7 +1,7 @@
 """Error rates of saved transcripts on the labelled utterances.
 
-    score.py <work dir> <name>=<transcripts.json> [<name>=<transcripts.json> ...] [--grade AB]
-    score.py --manifest <test.jsonl> [--no-digits] <name>=<transcripts.json> ...
+    sensevoice-finetune score <work dir> <name>=<transcripts.json> [<name>=<transcripts.json> ...] [--grade AB]
+    sensevoice-finetune score --manifest <test.jsonl> [--no-digits] <name>=<transcripts.json> ...
 
 Each JSON maps utterance id -> transcript (transcribe.py writes them); several files joined by
 commas count as one system. The second form scores
@@ -19,7 +19,7 @@ Subsets: "corrected" are the utterances of sessions whose text the user changed,
 label rests on the user more than on any recognizer; "latin" contain English words or letters.
 """
 import argparse, json, os, random, re
-import sv
+from . import sv
 
 
 def subsets(rows, status):
@@ -53,7 +53,7 @@ def bootstrap(rows, a, b, rounds=2000, seed=0):
 
 
 def main():
-    p = argparse.ArgumentParser()
+    p = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     p.add_argument("args", nargs="+", metavar="[work dir] name=transcripts.json")
     p.add_argument("--manifest")
     p.add_argument("--no-digits", action="store_true")

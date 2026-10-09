@@ -1,7 +1,7 @@
-"""Step 1: turn an export of Local Voice IME's recordings (its docs/TRAINING_DATA.md) into one row per
+"""Turn an export of Local Voice IME's recordings (its docs/TRAINING_DATA.md) into one row per
 utterance, with everything the log says about it.
 
-    prepare.py <export.zip or extracted directory> <work dir>
+    sensevoice-finetune prepare <export.zip or extracted directory> <work dir>
 
 Writes <work dir>/utterances.jsonl. Each row:
 
@@ -14,7 +14,7 @@ Writes <work dir>/utterances.jsonl. Each row:
 Nothing is filtered here; `label.py` decides what each utterance is worth.
 """
 import collections, os, sys, zipfile
-import sv
+from . import sv
 
 
 MAX_FILES, MAX_BYTES = 200_000, 20 << 30  # an export of years of dictation is far below both

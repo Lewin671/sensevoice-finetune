@@ -20,6 +20,13 @@
 /cv*/
 /final*/
 /runs/
+
+# Python
 /venv/
+/.venv/
+/build/
+/dist/
+*.egg-info/
 __pycache__/
+
 .DS_Store

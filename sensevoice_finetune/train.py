@@ -1,12 +1,12 @@
-"""Step 4: fine-tune SenseVoice Small on the labelled utterances.
+"""Fine-tune SenseVoice Small on the labelled utterances.
 
-    train.py <work dir> <SenseVoiceSmall dir> <out dir> [options]
+    sensevoice-finetune train <work dir> <SenseVoiceSmall dir> <out dir> [options]
 
 <SenseVoiceSmall dir> is the FunASR checkpoint (ModelScope iic/SenseVoiceSmall: model.pt,
 am.mvn, config.yaml, the sentencepiece model). With --holdout K the utterances of fold K are
 left out and transcribed after the epochs named by --eval-epochs, into
 <out dir>/holdout_e<epoch>[_w<weight>].json; that is how every choice below was made
-(README.md). Without it, everything is trained on and the result is saved for export.
+(docs/EVIDENCE.md). Without it, everything is trained on and the result is saved for export.
 
 What is trained on, per epoch:
   - every labelled utterance (grades A and B) once, each time at another speed and loudness and
@@ -32,7 +32,7 @@ Memory on an Apple-silicon GPU: about 7 GB for "all", 3-5 GB for the others; --m
 """
 import argparse, json, math, os, random, time
 import numpy as np
-import sv
+from . import sv
 
 SPEEDS = {0.9: (10, 9), 0.95: (20, 19), 1.0: (1, 1), 1.05: (20, 21), 1.1: (10, 11)}
 RICH_WEIGHT = 1.0
@@ -203,7 +203,7 @@ def trainable(model, spec):
 
 
 def main():
-    p = argparse.ArgumentParser()
+    p = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     p.add_argument("work"), p.add_argument("model_dir"), p.add_argument("out")
     p.add_argument("--holdout", type=int, default=-1)
     p.add_argument("--epochs", type=int, default=8)

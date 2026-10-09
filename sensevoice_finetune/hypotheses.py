@@ -1,6 +1,6 @@
-"""Step 2: transcribe every utterance again on the desktop, as the app would.
+"""Transcribe every utterance again on the desktop, as the app would.
 
-    hypotheses.py <work dir> <model dir> [name=sensevoice]
+    sensevoice-finetune hypotheses <work dir> <model dir> [name=sensevoice]
 
 <model dir> holds `model.int8.onnx` and `tokens.txt` (voice/models/sense-voice-small-int8).
 Writes <work dir>/hyp_<name>.json: id -> raw transcript.
@@ -10,7 +10,7 @@ recognizers go next to this file in the same form (hyp_<anything>.json); the mor
 opinions, the fewer utterances a person has to review.
 """
 import json, os, sys
-import sv
+from . import sv
 
 
 def main():

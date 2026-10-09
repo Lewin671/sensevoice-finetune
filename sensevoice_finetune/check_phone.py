@@ -1,6 +1,6 @@
 """Does the computer hear what the phone heard, and does loudness matter?
 
-    check_phone.py <work dir> <stock model dir>
+    sensevoice-finetune check-phone <work dir> <stock model dir>
 
 Transcribes the recordings of utterances.jsonl with the stock model as sherpa-onnx runs it and
 prints
@@ -15,7 +15,7 @@ prints
 """
 import os, sys
 import numpy as np
-import sv
+from . import sv
 
 
 def main():

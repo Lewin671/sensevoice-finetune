@@ -1,9 +1,9 @@
-"""Step 5: turn PyTorch weights into the two files the app loads: model.int8.onnx and tokens.txt.
+"""Turn PyTorch weights into the two files the app loads: model.int8.onnx and tokens.txt.
 
-    export_onnx.py <SenseVoiceSmall dir> <weights model.pt or -> <out dir> [mix weight]
+    sensevoice-finetune export-onnx <SenseVoiceSmall dir> <weights model.pt or -> <out dir> [mix weight]
 
 "-" exports the original model, which is how this script is checked: what comes out must
-transcribe like the files the app downloads (README.md has the comparison). With a mix weight the weights are first
+transcribe like the files the app downloads (docs/EVIDENCE.md has the comparison). With a mix weight the weights are first
 pulled back towards the original (mix.py).
 
 The graph, its metadata and the quantization (dynamic, MatMul only, unsigned 8-bit weights) are
@@ -12,7 +12,7 @@ https://github.com/k2-fsa/sherpa-onnx (Apache-2.0), from which this file is adap
 runtime reads the front-end settings and the token ids of the prompt from that metadata.
 """
 import os, sys
-import sv
+from . import sv
 
 
 def main():

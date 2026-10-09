@@ -1,10 +1,12 @@
 """Tests of the parts of the fine-tuning scripts that decide what is trained on and how it is
 scored. They need numpy and zhconv only, no model:
 
-    python3 -m unittest
+    python3 -m unittest      (from the root of the repository)
 """
-import json, os, random, tempfile, unittest, zipfile
-import label, prepare, sv, train
+import json, os, random, subprocess, sys, tempfile, unittest, zipfile
+from sensevoice_finetune import label, prepare, sv, train
+
+ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
 
 class AppText(unittest.TestCase):
@@ -220,10 +222,10 @@ class Training(unittest.TestCase):
 
 class Scores(unittest.TestCase):
     def run_score(self, d, *args):
-        import subprocess, sys
-        here = os.path.dirname(os.path.abspath(__file__))
-        return subprocess.run([sys.executable, os.path.join(here, "score.py"), *args], cwd=d,
-                              capture_output=True, text=True)
+        # from the checkout, installed or not
+        env = {**os.environ, "PYTHONPATH": os.pathsep.join(filter(None, [ROOT, os.environ.get("PYTHONPATH")]))}
+        return subprocess.run([sys.executable, "-m", "sensevoice_finetune.score", *args], cwd=d,
+                              env=env, capture_output=True, text=True)
 
     def test_a_missing_transcript_is_not_dropped_silently(self):
         with tempfile.TemporaryDirectory() as d:

@@ -1,7 +1,7 @@
 """Transcribe a list of audio files as the app would hear them.
 
-    transcribe.py <manifest.jsonl> <out.json> --onnx <dir with model.int8.onnx and tokens.txt>
-    transcribe.py <manifest.jsonl> <out.json> --torch <SenseVoiceSmall dir> [--weights model.pt] [--mix W]
+    sensevoice-finetune transcribe <manifest.jsonl> <out.json> --onnx <dir with model.int8.onnx and tokens.txt>
+    sensevoice-finetune transcribe <manifest.jsonl> <out.json> --torch <SenseVoiceSmall dir> [--weights model.pt] [--mix W]
 
 The manifest has one {"id", "audio"} per line (labels.jsonl and what public.py and replay.py
 write qualify); the output maps id -> raw transcript, for score.py.
@@ -12,11 +12,11 @@ original ones without --weights) behind the same front end, which is quicker whi
 training runs; --mix pulls the weights back towards the original first (mix.py).
 """
 import argparse, json, os
-import sv
+from . import sv
 
 
 def main():
-    p = argparse.ArgumentParser()
+    p = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     p.add_argument("manifest"), p.add_argument("out")
     p.add_argument("--onnx"), p.add_argument("--torch"), p.add_argument("--weights")
     p.add_argument("--mix", type=float)

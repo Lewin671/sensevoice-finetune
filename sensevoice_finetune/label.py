@@ -1,6 +1,6 @@
-"""Step 3: decide what was said in each utterance, and how far to trust that.
+"""Decide what was said in each utterance, and how far to trust that.
 
-    label.py <work dir> [--manual reviewed.tsv] [--folds 5] [--seed 0]
+    sensevoice-finetune label <work dir> [--manual reviewed.tsv] [--folds 5] [--seed 0]
 
 Reads <work dir>/utterances.jsonl and every <work dir>/hyp_*.json (id -> transcript;
 hyp_sensevoice.json, from hypotheses.py, is required and supplies the punctuation, digits and
@@ -26,7 +26,7 @@ Folds keep a session, and utterances that say nearly the same thing (a retry aft
 result), on one side of every split, so that no test sentence was trained on.
 """
 import argparse, glob, json, os, random
-import sv
+from . import sv
 
 
 def agreed(row, hyps):
@@ -108,7 +108,7 @@ def assign_folds(rows, k, seed):
 
 
 def main():
-    p = argparse.ArgumentParser()
+    p = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     p.add_argument("work")
     p.add_argument("--manual")
     p.add_argument("--folds", type=int, default=5)
