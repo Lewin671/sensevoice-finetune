@@ -66,7 +66,9 @@ def similar(a, b, threshold=0.3):
 
 
 def groups(rows):
-    """Union of sessions and near-identical transcripts -> group id per row."""
+    """Union of sessions and near-identical transcripts -> group id per row. A sentence that
+    went on after a pause is also trained on as a whole (train.build_items), so the whole is
+    compared as well: said in one go in another session, it must not end up in another fold."""
     parent = list(range(len(rows)))
 
     def find(i):
@@ -76,9 +78,15 @@ def groups(rows):
         return i
 
     words = [sv.score_tokens(r["text"]) for r in rows]
+    by_id = {r.get("id"): w for r, w in zip(rows, words)}
+    forms = []
+    for r, w in zip(rows, words):
+        joined = [t for i in r.get("joins", []) if i in by_id for t in by_id[i]] + w
+        forms.append([w] if joined == w else [w, joined])
     for i in range(len(rows)):
         for j in range(i):
-            if rows[i]["session"] == rows[j]["session"] or similar(words[i], words[j]):
+            if rows[i]["session"] == rows[j]["session"] or any(
+                    similar(a, b) for a in forms[i] for b in forms[j]):
                 parent[find(i)] = find(j)
     return [find(i) for i in range(len(rows))]
 
@@ -152,7 +160,7 @@ def main():
     for r in labels:
         r["joins"] = []
         if r.pop("continues"):
-            number = int(r["id"][-2:])
+            number = int(r["id"].rsplit("-", 1)[1])  # two digits at least, not at most
             before = by_id.get(f"{r['session']}-{number - 1:02d}")
             if before is not None:
                 r["joins"] = before["joins"] + [before["id"]]

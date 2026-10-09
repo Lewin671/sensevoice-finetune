@@ -8,10 +8,11 @@ commas count as one system. The second form scores
 any manifest of {"id", "text"} lines, e.g. the public sets of public.py; --no-digits leaves out
 the utterances in which a system wrote a digit, as Local Voice IME's docs/MODELS.md does, because those references
 spell numbers out. The error rate counts every CJK character and every
-Latin word or number, ignoring case and punctuation (as Local Voice IME's scripts/bench/bench.py does), over the
+Latin word or number, ignoring case and punctuation (sv.score_tokens), over the
 verified utterances (grade A) unless --grade says otherwise. The first system is the reference
 point: for every other one the difference to it is printed with a 95 % interval from a
-bootstrap that resamples groups (sessions and near-identical sentences), so an interval that
+bootstrap that resamples groups (sessions and near-identical sentences; in a manifest the
+"group" of a row if it has one, e.g. its speaker), so an interval that
 excludes 0 is a difference that holds beyond these particular utterances.
 
 Subsets: "corrected" are the utterances of sessions whose text the user changed, where the
@@ -58,9 +59,13 @@ def main():
     p.add_argument("--no-digits", action="store_true")
     p.add_argument("--grade", default="A")
     p.add_argument("--errors", help="write the utterances a system got wrong to this file")
+    p.add_argument("--common", action="store_true",
+                   help="score only the utterances every system transcribed, e.g. one fold; "
+                        "without it a missing transcript is an error of the run, not of the model")
     args = p.parse_args()
 
     if args.manifest:
+        # a manifest may name the speaker or recording of an utterance as its "group"
         labels = [{"group": r["id"], "grade": "-", **r} for r in sv.read_jsonl(args.manifest)]
         status, specs = {}, args.args
     else:
@@ -74,7 +79,14 @@ def main():
         for path in paths.split(","):  # e.g. one file per fold
             with open(path, encoding="utf-8") as f:
                 systems[name].update(json.load(f))
-    labels = [r for r in labels if all(r["id"] in h for h in systems.values())]
+    missing = {name: [r["id"] for r in labels if r["id"] not in h] for name, h in systems.items()}
+    if any(missing.values()):
+        for name, ids in missing.items():
+            if ids:
+                print(f"{name}: no transcript for {len(ids)} of {len(labels)} utterances, e.g. {ids[0]}")
+        if not args.common:
+            raise SystemExit("transcripts are missing; pass --common to score the rest on purpose")
+        labels = [r for r in labels if all(r["id"] in h for h in systems.values())]
     if args.no_digits:
         labels = [r for r in labels if sv.score_tokens(r["text"])
                   and not any(re.search(r"\d", h[r["id"]]) for h in systems.values())]

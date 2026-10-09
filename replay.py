@@ -5,8 +5,8 @@
 A model trained on twenty minutes of one voice drifts away from everything else. Mixing in
 utterances of other speakers, with the transcript the *unchanged* model gives them as the
 target, holds it in place: wherever it is not being taught something new, it is asked to stay
-as it is. No reference transcripts are used, so a corpus needs audio only, and rehearsing on it
-cannot teach the model that corpus.
+as it is. No reference transcripts are used, so a corpus needs audio only. The model still hears
+that audio: do not read a gain on speech like the rehearsal material as a general one.
 
 Each parquet file has an audio column ("audio" or "context", with embedded bytes) as the Hugging
 Face datasets of Local Voice IME's docs/MODELS.md do; N utterances (default 400) of 1-15 s are taken from each at
@@ -22,15 +22,28 @@ from scipy.signal import resample_poly
 import sv
 
 
+def corpus_name(path, taken):
+    """Directory and id prefix of a corpus: the file name, with the directory it is in when two
+    corpora have files of the same name (train-00000-of-00001.parquet)."""
+    path = os.path.abspath(path)
+    name = os.path.splitext(os.path.basename(path))[0]
+    if name in taken:
+        name = f"{os.path.basename(os.path.dirname(path))}-{name}"
+    if name in taken:
+        raise ValueError(f"two corpora would both be called {name}: rename one of the files")
+    return name
+
+
 def main():
     out, model_dir = sys.argv[1], sys.argv[2]
     recognizer = sv.sherpa_recognizer(os.path.join(model_dir, "model.int8.onnx"),
                                       os.path.join(model_dir, "tokens.txt"))
-    rows = []
+    rows, names = [], set()
     for spec in sys.argv[3:]:
         path, _, n = spec.partition(":")
         n = int(n or 400)
-        name = os.path.splitext(os.path.basename(path))[0]
+        name = corpus_name(path, names)
+        names.add(name)
         os.makedirs(os.path.join(out, name), exist_ok=True)
         f = pq.ParquetFile(path)
         column = "audio" if "audio" in f.schema_arrow.names else "context"

@@ -4,14 +4,19 @@ fine-tuned model can be checked for what it forgot.
     public.py <benchmark dir> <out dir>
 
 <benchmark dir> is the working directory of that repository's scripts/bench (data/<set>.parquet). For every set
-this writes two manifests of {"id", "audio", "text"} lines:
+this writes two manifests of {"id", "audio", "text"[, "group"]} lines ("group": the speaker or
+recording, where the corpus names one):
 
     <out dir>/test_<set>.jsonl   the 300 utterances every table in that docs/MODELS.md is computed on
                                  (same order and filters as its scripts/bench/bench.py)
     <out dir>/dev_<set>.jsonl    the 100 that follow them, for choosing settings without
                                  touching the ones that are reported
 
-The audio is written as 16 kHz mono 16-bit WAV, which is what the recognizer gets either way.
+The utterances are those of that benchmark; the numbers are not comparable with its tables. The
+audio is resampled here and written as 16 kHz 16-bit WAV, where bench.py hands the recognizer
+the decoded samples at their own rate, and score.py counts tokens slightly differently
+(sv.score_tokens). Compare models within this pipeline: transcribe the stock model with
+transcribe.py too.
 """
 import io, json, os, random, sys
 from math import gcd
@@ -21,6 +26,19 @@ from scipy.signal import resample_poly
 SETS = ["aishell1_test_0", "wenet_test_net_0", "wenet_test_meeting", "ascend_test",
         "librispeech_test_clean", "kespeech_test_0", "cv_zh_test"]
 TEST, DEV = 300, 100
+
+
+def speaker(r):
+    """Whoever or whatever recording an utterance belongs to, as far as the corpus says: errors
+    of one speaker go together, so score.py resamples these and not single utterances."""
+    for key in ("speaker_id", "client_id", "original_speaker_id"):
+        if r.get(key) is not None:
+            return str(r[key])
+    if r.get("sid"):  # WenetSpeech: TEST_NET_Y0000000000_-KTKHdZ2fb8_S00012, a segment of a recording
+        return r["sid"].rsplit("_S", 1)[0]
+    if r.get("ID") and "_" in r["ID"]:  # KeSpeech: <speaker>_<utterance>
+        return r["ID"].split("_", 1)[0]
+    return None
 
 
 def rows(path, name, wanted):
@@ -46,7 +64,7 @@ def rows(path, name, wanted):
             x = x.mean(1)
         if len(x) / rate < 1.0:
             continue
-        yield x, rate, text
+        yield x, rate, text, speaker(r)
         wanted -= 1
         if wanted == 0:
             return
@@ -57,13 +75,16 @@ def main():
     for name in SETS:
         os.makedirs(os.path.join(out, name), exist_ok=True)
         manifests = {"test": [], "dev": []}
-        for i, (x, rate, text) in enumerate(rows(os.path.join(bench, "data", f"{name}.parquet"), name, TEST + DEV)):
+        for i, (x, rate, text, who) in enumerate(rows(os.path.join(bench, "data", f"{name}.parquet"), name, TEST + DEV)):
             if rate != 16000:
                 g = gcd(rate, 16000)
                 x = resample_poly(x, 16000 // g, rate // g).astype(np.float32)
             path = os.path.abspath(os.path.join(out, name, f"{i:03d}.wav"))
             sf.write(path, x, 16000, subtype="PCM_16")
-            manifests["test" if i < TEST else "dev"].append({"id": f"{name}-{i:03d}", "audio": path, "text": text})
+            item = {"id": f"{name}-{i:03d}", "audio": path, "text": text}
+            if who is not None:
+                item["group"] = f"{name}-{who}"
+            manifests["test" if i < TEST else "dev"].append(item)
         for split, items in manifests.items():
             with open(os.path.join(out, f"{split}_{name}.jsonl"), "w", encoding="utf-8") as f:
                 for it in items:

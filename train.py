@@ -14,8 +14,8 @@ What is trained on, per epoch:
     the ones the recognizers got wrong, --hard times (3);
   - the parts of a sentence that went on after a pause, joined, as the app transcribes them;
   - now and then two unrelated utterances back to back, so that long input stays familiar;
-  - with --replay, as many utterances of other people's speech (see replay.py) as --replay-ratio
-    says (2), labelled by the unchanged model itself: what it could do before, it should still do.
+  - with --replay, utterances of other people's speech (see replay.py), --replay-ratio (2) for
+    each of the above, labelled by the unchanged model itself: what it could do before, it should still do.
 
 The model is trained as the app uses it: language "auto", inverse text normalization on, and the
 front end of sherpa-onnx (sv.py). The loss is CTC on the text plus cross-entropy on the four
@@ -61,6 +61,8 @@ def build_items(labels, holdout):
     """Training and held-out items; an item is {"ids": [...], "audio": [...], "text": str}."""
     by_id = {r["id"]: r for r in labels}
     train, held = [], []
+    # --grades may have removed a part of a sentence: then there is no whole to train on
+    joinable = lambda r: r["joins"] and all(i in by_id for i in r["joins"])
     for r in labels:
         item = {"ids": [r["id"]], "audio": [r["audio"]], "text": r["text"], "seconds": r["seconds"],
                 "hard": r.get("source") == "reviewed"}
@@ -69,12 +71,21 @@ def build_items(labels, holdout):
                 held.append(item)
             continue
         train.append(item)
-        if r["joins"]:
+        if joinable(r):
             parts = [by_id[i] for i in r["joins"]] + [r]
             train.append({"ids": [p["id"] for p in parts], "audio": [p["audio"] for p in parts],
                           "text": join_texts([p["text"] for p in parts], True),
                           "seconds": sum(p["seconds"] for p in parts)})
     return train, held
+
+
+def schedule(progress, warmup=0.1, floor=0.1):
+    """Factor on the learning rate at `progress` (0..1) through training: linear warm-up over
+    the first tenth, then a cosine down to a tenth. It follows the batches actually trained
+    on, whatever the repeats and the rehearsal add to an epoch."""
+    if progress < warmup:
+        return max(progress / warmup, 0.01)
+    return floor + (1 - floor) * 0.5 * (1 + math.cos(math.pi * min(1.0, (progress - warmup) / (1 - warmup))))
 
 
 class Augment:
@@ -272,17 +283,19 @@ def main():
                     items.append({"audio": it["audio"] + other["audio"], "rich": it["rich"],
                                   "text": join_texts([it["text"], other["text"]], False)})
         if replay:
-            items += rng.sample(replay, min(len(replay), round(args.replay_ratio * len(train))))
+            # per utterance of one's own in this epoch, repeats and pairs included
+            wanted = round(args.replay_ratio * len(items))
+            if wanted > len(replay) and not short:
+                short.append(True)
+                print(f"the replay pool has {len(replay)} utterances where --replay-ratio asks for "
+                      f"{wanted} per epoch: all are used, {len(replay) / len(items):.2f} per own one",
+                      flush=True)
+            items += rng.sample(replay, min(len(replay), wanted))
         return items
 
-    steps_per_epoch = max(1, round(sum(i["seconds"] for i in train) * (1 + args.pairs) * 16.7 / args.max_cells * 1.3))  # rough, for the schedule
-    total = args.epochs * steps_per_epoch
-    warmup = max(1, total // 10)
+    short = []  # said once
 
-    def lr_at(step):
-        if step < warmup:
-            return (step + 1) / warmup
-        return 0.1 + 0.9 * 0.5 * (1 + math.cos(math.pi * min(1.0, (step - warmup) / max(1, total - warmup))))
+    lr_at = schedule
 
     def transcribe(items):
         model.eval()
@@ -305,7 +318,7 @@ def main():
 
     if 0 in eval_epochs:
         evaluate(0)
-    step, t0 = 0, time.time()
+    t0 = time.time()
     for epoch in range(1, args.epochs + 1):
         model.train()
         items = epoch_items()
@@ -320,7 +333,8 @@ def main():
             targets.append(ids)
         keep = [i for i in range(len(items)) if feats[i] is not None]
         loss_sum = n_batches = 0
-        for part in batches([len(feats[i]) for i in keep], args.max_cells, 24, rng):
+        plan = list(batches([len(feats[i]) for i in keep], args.max_cells, 24, rng))
+        for b, part in enumerate(plan):
             idx = [keep[i] for i in part]
             x, n = m.batch([feats[i] for i in idx])
             logits, out_n = m.logits(x, n)
@@ -334,12 +348,11 @@ def main():
             ce = torch.nn.functional.nll_loss(logp[:, :4].reshape(-1, logp.size(-1)), rich.reshape(-1), reduction="sum")
             loss = (ctc + RICH_WEIGHT * ce) / len(idx)
             for g in opt.param_groups:
-                g["lr"] = args.lr * lr_at(step) * g.get("scale", 1.0)
+                g["lr"] = args.lr * lr_at((epoch - 1 + b / len(plan)) / args.epochs) * g.get("scale", 1.0)
             opt.zero_grad()
             loss.backward()
             torch.nn.utils.clip_grad_norm_(params, 5.0)
             opt.step()
-            step += 1
             if args.device == "mps":  # the allocator otherwise keeps a buffer for every batch shape it has seen
                 torch.mps.empty_cache()
             loss_sum += float(loss)

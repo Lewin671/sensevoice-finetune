@@ -17,16 +17,42 @@ import collections, os, sys, zipfile
 import sv
 
 
+MAX_FILES, MAX_BYTES = 200_000, 20 << 30  # an export of years of dictation is far below both
+
+
 def extract(archive, dest):
-    """Unpack an export; refuses entries that would land outside `dest`."""
+    """Unpack an export into `dest`. Refuses an archive with entries that are not plain relative
+    paths or that would be written through a symbolic link already in `dest`, and one that is
+    larger than any export could be; each file is written to the path that was checked."""
     os.makedirs(dest, exist_ok=True)
     root = os.path.realpath(dest)
     with zipfile.ZipFile(archive) as z:
-        for info in z.infolist():
-            target = os.path.realpath(os.path.join(root, info.filename))
-            if target != root and not target.startswith(root + os.sep):
+        infos = z.infolist()
+        if len(infos) > MAX_FILES or sum(i.file_size for i in infos) > MAX_BYTES:
+            raise ValueError(f"{archive} is larger than an export can be")
+        targets = []
+        for info in infos:
+            parts = info.filename.replace("\\", "/").split("/")
+            if info.is_dir():
+                parts = parts[:-1]
+            if info.filename.startswith("/") or not parts or any(p in ("", ".", "..") or ":" in p for p in parts):
                 raise ValueError(f"unsafe path in archive: {info.filename}")
-        z.extractall(root)
+            target = os.path.join(root, *parts)
+            if os.path.realpath(target) != target:
+                raise ValueError(f"{info.filename} would be written through a link in {dest}")
+            targets.append(target)
+        for info, target in zip(infos, targets):
+            if info.is_dir():
+                os.makedirs(target, exist_ok=True)
+                continue
+            os.makedirs(os.path.dirname(target), exist_ok=True)
+            left = info.file_size
+            with z.open(info) as src, open(target, "wb") as out:
+                while chunk := src.read(min(1 << 20, left + 1)):
+                    left -= len(chunk)
+                    if left < 0:
+                        raise ValueError(f"{info.filename} is longer than the archive declares")
+                    out.write(chunk)
     return root
 
 

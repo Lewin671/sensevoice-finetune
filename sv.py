@@ -3,7 +3,7 @@
 The front end here is the one sherpa-onnx applies on the phone (80 mel bins, Hamming window,
 no dither, `snip_edges`, low frame rate 7/6 without padding, global mean/variance), not the one
 FunASR trains with, which pads three frames on the left. Fine-tuning and evaluation therefore
-see exactly the features the app will feed the exported model. `baseline.py` checks that claim.
+see the features the app will feed the exported model; `check_phone.py` measures how closely.
 """
 import json, os, re, wave
 import numpy as np
@@ -203,7 +203,9 @@ def app_normalize(raw):
 
 def score_tokens(text):
     """Tokens an error rate is counted on: every CJK character, every Latin word or number;
-    case and punctuation ignored (the convention of Local Voice IME's scripts/bench/bench.py)."""
+    case ignored. Punctuation separates words, where Local Voice IME's scripts/bench/bench.py
+    deletes it first ("Wi-Fi" is two tokens here and one there), so rates on the same
+    transcripts differ slightly between the two."""
     import zhconv
 
     s = zhconv.convert(text, "zh-cn").lower()

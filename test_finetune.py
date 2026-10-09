@@ -70,6 +70,34 @@ class Prepare(unittest.TestCase):
                 prepare.extract(archive, os.path.join(d, "out"))
             self.assertFalse(os.path.exists(os.path.join(d, "evil.txt")))
 
+    def test_archive_is_not_written_through_a_link(self):
+        # zipfile drops ".." where realpath follows the link first: check what is written
+        with tempfile.TemporaryDirectory() as d:
+            out, elsewhere = os.path.join(d, "out"), os.path.join(d, "elsewhere", "deep")
+            os.makedirs(out), os.makedirs(elsewhere)
+            os.symlink(elsewhere, os.path.join(out, "link"))
+            for name in ("link/../../out/payload", "link/payload"):
+                archive = os.path.join(d, "x.zip")
+                with zipfile.ZipFile(archive, "w") as z:
+                    z.writestr(name, "x")
+                with self.assertRaises(ValueError):
+                    prepare.extract(archive, out)
+            self.assertEqual([], [f for _, _, files in os.walk(os.path.join(d, "elsewhere")) for f in files])
+
+    def test_archive_that_is_too_large_is_refused(self):
+        with tempfile.TemporaryDirectory() as d:
+            archive = os.path.join(d, "x.zip")
+            with zipfile.ZipFile(archive, "w", zipfile.ZIP_DEFLATED) as z:
+                z.writestr("log.jsonl", "0" * 4096)
+            limit, prepare.MAX_BYTES = prepare.MAX_BYTES, 1024
+            try:
+                with self.assertRaises(ValueError):
+                    prepare.extract(archive, os.path.join(d, "out"))
+            finally:
+                prepare.MAX_BYTES = limit
+            with open(os.path.join(prepare.extract(archive, os.path.join(d, "ok")), "log.jsonl")) as f:
+                self.assertEqual("0" * 4096, f.read())
+
 
 def row(uid, **kw):
     base = {"id": uid, "of": 1, "field": None, "status": "unconfirmed", "refined": None}
@@ -108,7 +136,7 @@ class Labels(unittest.TestCase):
 
     def test_retries_and_sessions_stay_in_one_fold(self):
         rows = [{"session": f"s{i}", "text": t, "seconds": 2.0} for i, t in enumerate(
-            ["这张地铁图怎么看？", "这张地铁图怎么看", "明天早上八点出发。", "完全不同的一句话。"])]
+            ["这班地铁开往哪里？", "这班地铁开往哪里", "明天早上八点出发。", "完全不同的一句话。"])]
         rows.append({"session": "s3", "text": "同一个会话的另一句。", "seconds": 2.0})
         groups = label.groups(rows)
         self.assertEqual(groups[0], groups[1])
@@ -120,6 +148,18 @@ class Labels(unittest.TestCase):
         self.assertEqual(rows[0]["fold"], rows[1]["fold"])
         self.assertEqual(rows[3]["fold"], rows[4]["fold"])
         self.assertEqual({0, 1, 2}, {r["fold"] for r in rows})
+
+
+    def test_a_sentence_said_in_parts_and_in_one_go_stays_in_one_fold(self):
+        rows = [
+            {"id": "a-01", "session": "a", "text": "今天天气特别晴朗。", "seconds": 2.0, "joins": []},
+            {"id": "a-02", "session": "a", "text": "我们一起去公园散步。", "seconds": 2.0, "joins": ["a-01"]},
+            {"id": "b-01", "session": "b", "text": "今天天气特别晴朗我们一起去公园散步。", "seconds": 4.0, "joins": []},
+            {"id": "c-01", "session": "c", "text": "完全不同的一句话。", "seconds": 2.0, "joins": []},
+        ]
+        groups = label.groups(rows)
+        self.assertEqual(groups[1], groups[2])
+        self.assertNotEqual(groups[0], groups[3])
 
 
 class Training(unittest.TestCase):
@@ -151,6 +191,21 @@ class Training(unittest.TestCase):
         self.assertEqual(6, len(tr))
         self.assertEqual([], held)
 
+    def test_a_sentence_is_not_joined_when_a_part_was_filtered_out(self):
+        labels = [
+            {"id": "a-02", "audio": "a2", "text": "二。", "seconds": 1, "fold": 1, "grade": "A", "joins": ["a-01"]},
+        ]
+        tr, _ = train.build_items(labels, 0)
+        self.assertEqual([["a-02"]], [i["ids"] for i in tr])
+
+    def test_schedule_follows_progress(self):
+        self.assertLess(train.schedule(0.0), 0.05)
+        self.assertAlmostEqual(1.0, train.schedule(0.1))
+        self.assertGreater(train.schedule(0.5), 0.5)  # still learning half way through
+        self.assertAlmostEqual(0.1, train.schedule(1.0))
+        values = [train.schedule(p / 100) for p in range(10, 101)]
+        self.assertEqual(sorted(values, reverse=True), values)
+
     def test_batches_cover_everything_within_the_limit(self):
         rng = random.Random(0)
         lengths = [rng.randint(5, 300) for _ in range(200)]
@@ -161,6 +216,31 @@ class Training(unittest.TestCase):
                 self.assertLessEqual(max(lengths[i] for i in b) * len(b), 480 + 300)
             seen += b
         self.assertEqual(sorted(seen), list(range(200)))
+
+
+class Scores(unittest.TestCase):
+    def run_score(self, d, *args):
+        import subprocess, sys
+        here = os.path.dirname(os.path.abspath(__file__))
+        return subprocess.run([sys.executable, os.path.join(here, "score.py"), *args], cwd=d,
+                              capture_output=True, text=True)
+
+    def test_a_missing_transcript_is_not_dropped_silently(self):
+        with tempfile.TemporaryDirectory() as d:
+            with open(os.path.join(d, "m.jsonl"), "w", encoding="utf-8") as f:
+                for i, who in enumerate("xxy"):
+                    f.write(json.dumps({"id": f"u{i}", "text": "你好", "group": who}, ensure_ascii=False) + "\n")
+            for name, hyp in (("a", {"u0": "你好", "u1": "你号", "u2": "你好"}), ("b", {"u0": "你好", "u1": "你好"})):
+                with open(os.path.join(d, name + ".json"), "w", encoding="utf-8") as f:
+                    json.dump(hyp, f, ensure_ascii=False)
+            refused = self.run_score(d, "--manifest", "m.jsonl", "a=a.json", "b=b.json")
+            self.assertNotEqual(0, refused.returncode)
+            self.assertIn("b: no transcript for 1 of 3", refused.stdout)
+            common = self.run_score(d, "--common", "--manifest", "m.jsonl", "a=a.json", "b=b.json")
+            self.assertEqual(0, common.returncode, common.stderr)
+            self.assertIn("all: 2 utterances, 4 tokens", common.stdout)
+            whole = self.run_score(d, "--manifest", "m.jsonl", "a=a.json")
+            self.assertIn("all: 3 utterances, 6 tokens", whole.stdout)
 
 
 if __name__ == "__main__":
