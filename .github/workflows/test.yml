@@ -23,3 +23,5 @@ jobs:
       - run: pip install numpy zhconv
       - run: python -m unittest -v
       - run: bash -n scripts/cross_validate.sh
+      # the package installs and its command starts
+      - run: pip install --no-deps . && sensevoice-finetune --help && sensevoice-finetune prepare --help
