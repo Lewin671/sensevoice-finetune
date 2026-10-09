@@ -40,8 +40,9 @@ It is one person's model: better at that person's words, slightly worse at accen
 than the original (below), and of use to others mainly as a worked example. The recordings and
 their transcripts it was trained on are not published.
 
-Local Voice IME accepts catalogued models only, by checksum; a model of your own cannot be
-imported in its settings yet.
+Local Voice IME 0.9.0 and later offer this model under *Settings → Voice input*, as an
+example. The app accepts catalogued models only, by checksum; a model of your own cannot be
+imported yet.
 
 ## Recipe
 
