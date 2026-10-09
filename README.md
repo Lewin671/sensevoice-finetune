@@ -51,7 +51,10 @@ than the original (below), and of use to others mainly as a worked example. The 
 their transcripts it was trained on are not published.
 
 Local Voice IME offers `model-20261009` under *Settings → Voice input*, as an
-example (0.9.0 offered `model-20261008`; 0.9.1 and later the newer one). The app accepts catalogued models only, by checksum; a model of your own cannot be
+example (0.9.0 offered `model-20261008`; 0.9.1 and later the newer one). From 0.10.0 the app
+finds a newer model by itself when asked to: it reads the newest release of this repository,
+which must therefore always be a model, tagged `model-<yyyymmdd>` and holding `model.int8.onnx`
+and `tokens.txt`. The app accepts catalogued models only, by checksum; a model of your own cannot be
 imported yet.
 
 ## Recipe
